@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#14213D">
+<title>Salondaki Robotlar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=DM+Sans:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root { --navy:#14213D; --navy2:#1B2C5A; --light:#F4F6FB; --muted:#B9C4DE; --yellow:#F5B700; --green:#3DDC84; }
+  * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  html, body { height:100%; background:var(--navy); color:var(--light); font-family:'DM Sans', system-ui, sans-serif; overflow:hidden; overscroll-behavior:none; }
+  body { display:flex; flex-direction:column; height:100dvh; }
+  h1, h2, .num { font-family:'Bricolage Grotesque', system-ui, sans-serif; }
+
+  /* Üst çubuk */
+  #bar { flex:0 0 auto; display:flex; align-items:center; justify-content:space-between; gap:12px;
+         padding:calc(10px + env(safe-area-inset-top)) 16px 10px; background:var(--navy); z-index:2; }
+  #found { font-size:18px; font-weight:700; }
+  #found .num { font-size:28px; color:var(--yellow); }
+  #timer { font-size:22px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--muted); }
+  #dots { display:flex; gap:8px; }
+  #dots span { width:16px; height:16px; border-radius:50%; border:2px solid var(--yellow); }
+  #dots span.on { background:var(--yellow); }
+
+  /* Görsel alanı */
+  #view { position:relative; flex:1 1 auto; overflow:auto; touch-action:pan-x pan-y; -webkit-overflow-scrolling:touch;
+          background:#0d1730; scrollbar-width:none; }
+  #view::-webkit-scrollbar { display:none; }
+  #stage { position:relative; transform-origin:0 0; }
+  #stage img { display:block; width:100%; height:100%; user-select:none; -webkit-user-drag:none; pointer-events:none; }
+  .ring { position:absolute; border:4px solid var(--green); border-radius:50%; box-shadow:0 0 0 3px rgba(0,0,0,.45), 0 0 24px var(--green);
+          transform:translate(-50%,-50%) scale(.2); animation:pop .45s cubic-bezier(.2,1.6,.4,1) forwards; pointer-events:none; }
+  .miss { position:absolute; width:44px; height:44px; border:3px solid rgba(255,255,255,.85); border-radius:50%;
+          transform:translate(-50%,-50%); animation:fade .6s ease-out forwards; pointer-events:none; }
+  @keyframes pop { to { transform:translate(-50%,-50%) scale(1); } }
+  @keyframes fade { from { opacity:1; transform:translate(-50%,-50%) scale(.6); } to { opacity:0; transform:translate(-50%,-50%) scale(1.4); } }
+
+  /* Yakınlaştırma */
+  #zoom { position:fixed; right:14px; bottom:calc(18px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; gap:10px; z-index:3; }
+  #zoom button { width:56px; height:56px; border-radius:50%; border:none; background:var(--light); color:var(--navy);
+                 font-size:30px; font-weight:700; box-shadow:0 4px 14px rgba(0,0,0,.4); }
+  #zoom button:active { transform:scale(.94); }
+  #hint { position:fixed; left:14px; bottom:calc(30px + env(safe-area-inset-bottom));
+          background:rgba(20,33,61,.88); padding:10px 16px; border-radius:999px; font-size:15px; white-space:nowrap; z-index:3;
+          transition:opacity .4s; pointer-events:none; }
+  #toast { position:fixed; left:50%; top:30%; transform:translate(-50%,-50%) scale(.8); opacity:0; z-index:4;
+           background:var(--green); color:var(--navy); font-family:'Bricolage Grotesque', system-ui, sans-serif; font-weight:800;
+           font-size:30px; padding:14px 26px; border-radius:18px; transition:all .25s; pointer-events:none; }
+  #toast.show { opacity:1; transform:translate(-50%,-50%) scale(1); }
+
+  /* Ekranlar */
+  .screen { position:fixed; inset:0; z-index:10; display:flex; flex-direction:column; justify-content:center; align-items:center;
+            gap:22px; padding:32px 28px calc(32px + env(safe-area-inset-bottom)); text-align:center; background:var(--navy); }
+  .screen.hide { display:none; }
+  .screen h1 { font-size:44px; line-height:1.05; font-weight:800; }
+  .screen h1 em { font-style:normal; color:var(--yellow); }
+  .screen p { font-size:19px; line-height:1.4; color:var(--muted); max-width:340px; }
+  .screen .big { font-family:'Bricolage Grotesque', system-ui, sans-serif; font-size:64px; font-weight:800; color:var(--yellow); }
+  .btn { border:none; background:var(--yellow); color:var(--navy); font-family:'Bricolage Grotesque', system-ui, sans-serif;
+         font-size:26px; font-weight:800; padding:18px 44px; border-radius:999px; }
+  .btn:active { transform:scale(.96); }
+  .bot { width:110px; height:110px; }
+  #loading { font-size:15px; color:var(--muted); }
+</style>
+</head>
+<body>
+
+<div id="bar">
+  <div id="found"><span class="num" id="count">0</span> / <span id="total">2</span> robot</div>
+  <div id="dots"></div>
+  <div id="timer">0:00</div>
+</div>
+
+<div id="view"><div id="stage"><img id="img" alt="Salonun çizgi film hali"></div></div>
+
+<div id="zoom">
+  <button id="zin" aria-label="Yakınlaştır">+</button>
+  <button id="zout" aria-label="Uzaklaştır">−</button>
+</div>
+<div id="hint">Kaydır, yakınlaştır, robota dokun</div>
+<div id="toast">Buldun!</div>
+
+<div class="screen" id="start">
+  <svg class="bot" viewBox="0 0 100 100" aria-hidden="true">
+    <line x1="50" y1="8" x2="50" y2="22" stroke="#F5B700" stroke-width="4"/><circle cx="50" cy="8" r="6" fill="#F5B700"/>
+    <rect x="18" y="22" width="64" height="50" rx="14" fill="#F4F6FB"/>
+    <circle cx="38" cy="46" r="9" fill="#14213D"/><circle cx="62" cy="46" r="9" fill="#14213D"/>
+    <circle cx="40" cy="44" r="3" fill="#F4F6FB"/><circle cx="64" cy="44" r="3" fill="#F4F6FB"/>
+    <rect x="30" y="76" width="40" height="18" rx="6" fill="#F5B700"/>
+  </svg>
+  <h1>Bu salonda<br><em><span id="totalStart">2</span> robot</em> saklı.</h1>
+  <p>Görseli parmağınla kaydır, + ile yakınlaştır, robotu görünce üstüne dokun.</p>
+  <button class="btn" id="go" disabled>Başla</button>
+  <div id="loading">Görsel yükleniyor…</div>
+</div>
+
+<div class="screen hide" id="win">
+  <h1>İkisini de<br><em>buldun!</em></h1>
+  <div class="big" id="final">0:00</div>
+  <p>Şimdi elini kaldır.</p>
+  <button class="btn" id="again">Tekrar bak</button>
+</div>
+
+<script>
+// Ayarlar: görsel ve robotların görseldeki yeri (piksel, görselin kendi boyutunda).
+const CONFIG = {
+  image: "salon.jpg",
+  width: 2560, height: 1440,
+  robots: [
+    { x: 736,  y: 819, r: 70 },   // merdivendeki sarı robot
+    { x: 1737, y: 576, r: 70 },   // sağdaki mor robot
+  ],
+  maxZoom: 4,
+};
+
+const $ = id => document.getElementById(id);
+const view = $("view"), stage = $("stage"), img = $("img");
+const total = CONFIG.robots.length;
+$("total").textContent = total; $("totalStart").textContent = total;
+$("dots").innerHTML = CONFIG.robots.map(() => "<span></span>").join("");
+$("win").querySelector("h1").innerHTML = total === 2 ? "İkisini de<br><em>buldun!</em>" : "Hepsini<br><em>buldun!</em>";
+
+let zoom = 1, baseH = 0, found = new Set(), t0 = 0, tick = null, done = false;
+
+function fit() {
+  // Dikey ekranda görsel yüksekliği doldurur, yatayda kaydırılır.
+  const vw = view.clientWidth, vh = view.clientHeight;
+  baseH = Math.max(vh, vw * CONFIG.height / CONFIG.width);
+  apply(view.scrollLeft + vw / 2, view.scrollTop + vh / 2, zoom, true);
+}
+function size() { const h = baseH * zoom; return { w: h * CONFIG.width / CONFIG.height, h }; }
+function apply(cx, cy, newZoom, keepRatio) {
+  const before = size();
+  const rx = before.w ? cx / before.w : .5, ry = before.h ? cy / before.h : .5;
+  zoom = Math.min(CONFIG.maxZoom, Math.max(1, newZoom));
+  const s = size();
+  stage.style.width = s.w + "px"; stage.style.height = s.h + "px";
+  view.scrollLeft = rx * s.w - view.clientWidth / 2;
+  view.scrollTop = ry * s.h - view.clientHeight / 2;
+  placeMarks();
+}
+function zoomBy(f) {
+  apply(view.scrollLeft + view.clientWidth / 2, view.scrollTop + view.clientHeight / 2, zoom * f);
+  hideHint();
+}
+$("zin").onclick = () => zoomBy(1.6);
+$("zout").onclick = () => zoomBy(1 / 1.6);
+
+// İki parmakla yakınlaştırma
+let pinch = null;
+view.addEventListener("touchstart", e => {
+  if (e.touches.length === 2) {
+    const [a, b] = e.touches, r = view.getBoundingClientRect();
+    pinch = { d: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY), z: zoom,
+              cx: (a.clientX + b.clientX) / 2 - r.left, cy: (a.clientY + b.clientY) / 2 - r.top };
+  }
+}, { passive: true });
+view.addEventListener("touchmove", e => {
+  if (pinch && e.touches.length === 2) {
+    e.preventDefault();
+    const [a, b] = e.touches;
+    const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    const px = view.scrollLeft + pinch.cx, py = view.scrollTop + pinch.cy;
+    const before = size();
+    zoom = Math.min(CONFIG.maxZoom, Math.max(1, pinch.z * d / pinch.d));
+    const s = size();
+    stage.style.width = s.w + "px"; stage.style.height = s.h + "px";
+    view.scrollLeft = px / before.w * s.w - pinch.cx;
+    view.scrollTop = py / before.h * s.h - pinch.cy;
+    placeMarks(); hideHint();
+  }
+}, { passive: false });
+view.addEventListener("touchend", e => { if (e.touches.length < 2) pinch = null; });
+
+// Dokunma: kaydırma değilse robot kontrolü
+let down = null;
+view.addEventListener("pointerdown", e => { down = { x: e.clientX, y: e.clientY, t: Date.now(), sl: view.scrollLeft, st: view.scrollTop }; });
+view.addEventListener("pointerup", e => {
+  if (!down || done || pinch) return;
+  const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y) + Math.abs(view.scrollLeft - down.sl) + Math.abs(view.scrollTop - down.st);
+  const slow = Date.now() - down.t > 700;
+  down = null;
+  if (moved > 12 || slow) return;
+  const r = stage.getBoundingClientRect(), s = size();
+  const ix = (e.clientX - r.left) / s.w * CONFIG.width, iy = (e.clientY - r.top) / s.h * CONFIG.height;
+  // Dokunuş alanı: görsel uzaklaştıkça parmağa göre biraz genişler.
+  const scale = s.w / CONFIG.width, minPx = 26;
+  const hit = CONFIG.robots.findIndex((b, i) => !found.has(i) && Math.hypot(ix - b.x, iy - b.y) <= Math.max(b.r, minPx / scale));
+  if (hit >= 0) {
+    found.add(hit);
+    if (navigator.vibrate) navigator.vibrate(60);
+    placeMarks(); update(); toast(found.size === total ? "Hepsi tamam!" : "Buldun!");
+    if (found.size === total) finish();
+  } else {
+    const m = document.createElement("div");
+    m.className = "miss"; m.style.left = (ix / CONFIG.width * s.w) + "px"; m.style.top = (iy / CONFIG.height * s.h) + "px";
+    stage.appendChild(m); setTimeout(() => m.remove(), 650);
+  }
+  hideHint();
+});
+
+function placeMarks() {
+  const s = size();
+  stage.querySelectorAll(".ring").forEach(n => n.remove());
+  found.forEach(i => {
+    const b = CONFIG.robots[i], d = Math.max(48, b.r * 2.2 * s.w / CONFIG.width);
+    const n = document.createElement("div");
+    n.className = "ring";
+    Object.assign(n.style, { left: b.x / CONFIG.width * s.w + "px", top: b.y / CONFIG.height * s.h + "px", width: d + "px", height: d + "px", animation: "none", transform: "translate(-50%,-50%)" });
+    stage.appendChild(n);
+  });
+}
+function update() {
+  $("count").textContent = found.size;
+  [...$("dots").children].forEach((d, i) => d.classList.toggle("on", i < found.size));
+}
+function fmt(ms) { const s = Math.floor(ms / 1000); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
+function toast(t) { const n = $("toast"); n.textContent = t; n.classList.add("show"); setTimeout(() => n.classList.remove("show"), 900); }
+let hintHidden = false;
+function hideHint() { if (!hintHidden) { hintHidden = true; $("hint").style.opacity = 0; } }
+
+function start() {
+  $("start").classList.add("hide");
+  t0 = Date.now();
+  tick = setInterval(() => $("timer").textContent = fmt(Date.now() - t0), 250);
+  fit();
+  view.scrollLeft = (view.scrollWidth - view.clientWidth) / 2;
+}
+function finish() {
+  done = true; clearInterval(tick);
+  const t = fmt(Date.now() - t0);
+  $("timer").textContent = t; $("final").textContent = t;
+  setTimeout(() => $("win").classList.remove("hide"), 900);
+}
+$("go").onclick = start;
+$("again").onclick = () => $("win").classList.add("hide");
+
+img.onload = () => { $("go").disabled = false; $("loading").textContent = ""; fit(); };
+img.onerror = () => { $("loading").textContent = "Görsel yüklenemedi. Sayfayı yenile."; };
+img.src = CONFIG.image;
+addEventListener("resize", fit);
+</script>
+</body>
+</html>
