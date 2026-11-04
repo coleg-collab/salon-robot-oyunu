@@ -109,8 +109,7 @@ const CONFIG = {
   image: "salon.jpg",
   width: 2400, height: 1792,
   robots: [
-    { x: 535,  y: 955, r: 90 },   // soldaki koltuğun arkasından bakan sarı robot
-    { x: 2155, y: 575, r: 100 },  // sağ arka sıralardaki mor robot
+    { x: 262, y: 320, r: 60 },    // sol arka sıralardaki küçük mavi robot
   ],
   maxZoom: 4,
 };
@@ -120,7 +119,7 @@ const view = $("view"), stage = $("stage"), img = $("img");
 const total = CONFIG.robots.length;
 $("total").textContent = total; $("totalStart").textContent = total;
 $("dots").innerHTML = CONFIG.robots.map(() => "<span></span>").join("");
-$("win").querySelector("h1").innerHTML = total === 2 ? "İkisini de<br><em>buldun!</em>" : "Hepsini<br><em>buldun!</em>";
+$("win").querySelector("h1").innerHTML = total === 1 ? "Robotu<br><em>buldun!</em>" : total === 2 ? "İkisini de<br><em>buldun!</em>" : "Hepsini<br><em>buldun!</em>";
 
 let zoom = 1, baseH = 0, found = new Set(), t0 = 0, tick = null, done = false;
 
